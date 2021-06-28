@@ -94,8 +94,6 @@ primates <-
 
 suma_especies <- primates %>% count(species)
 
-
-
 ```
 
 
@@ -109,7 +107,7 @@ suma_especies <- primates %>% count(species)
 
 primates %>%
   st_drop_geometry() %>%
-  select(family, species, stateProvince, canton.y, eventDate) %>%
+  dplyr::select(family, species, stateProvince, canton, eventDate) %>%
   datatable(
     colnames = c("Familia", "Especie", "Provincia", "Cantón", "Fecha"),
     options = list(searchHighlight = TRUE,
@@ -121,7 +119,7 @@ primates %>%
 
 # Creación de gráfico de pastel
 
-```{r grafico}
+```{r grafico, message=FALSE, warning=FALSE}
 
 # Se crea la data con el total de especies
 
@@ -149,7 +147,6 @@ fig <-
       showticklabels = FALSE
     )
   )
-# Se utiliza el fig para la ejecución del gráfico
 
 fig 
 
@@ -173,13 +170,13 @@ altitud <-
 
 ```
 
-```{r mapa}
+```{r mapa, message=FALSE, warning=FALSE}
 primates %>%
-  select(
+  dplyr::select(
     family,
     species,
     stateProvince,
-    canton.y,
+    canton,
     eventDate,
     decimalLongitude,
     decimalLatitude
