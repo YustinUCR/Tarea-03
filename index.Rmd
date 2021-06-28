@@ -1,0 +1,222 @@
+---
+title: "Tarea 03"
+author: "Yustin Leiva"
+date: "26/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Cargamos las librerias: 
+
+
+```{r Carga de librerias, warning=FALSE, message=FALSE}
+
+library(dplyr)
+library(sf)
+library(DT)
+library(plotly)
+library(leaflet)
+library(raster)
+library(RColorBrewer)
+
+
+
+```
+
+# Carga de los datos para la elaboración y asignación de sistema de referencia.
+
+
+```{r primates}
+# Carga de datos de primates
+
+primates <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/gbif/primates-cr-registros.csv",
+    options = c(
+      "X_POSSIBLE_NAMES=decimalLongitude",
+      "Y_POSSIBLE_NAMES=decimalLatitude"
+    ), 
+    quiet = TRUE
+  )
+
+
+```
+
+
+
+```{r Carga de de datos de cantones }
+# Carga geoespacial de cantones
+
+cantones <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/ign/delimitacion-territorial-administrativa/cr_cantones_simp_wgs84.geojson",
+    quiet = TRUE
+  )
+
+
+```
+
+
+
+```{r Carga de de datos}
+# Carga geoespacial de provincias
+
+provincias <-
+  st_read(
+    "https://raw.githubusercontent.com/gf0604-procesamientodatosgeograficos/2021i-datos/main/ign/delimitacion-territorial-administrativa/cr_provincias_simp_wgs84.geojson",
+    quiet = TRUE
+  )
+# Asignación de CRS
+
+st_crs(cantones) = 4326
+st_crs(primates) = 4326
+
+```
+
+
+
+```{r cantones, message=FALSE, warning=FALSE}
+
+# Cruce espacial con la tabla de cantones, para obtener de esta forma el nombre del canton
+
+primates <- 
+  primates %>%
+  st_join(cantones["canton"])
+
+
+```
+
+```{r suma, message=FALSE}
+# Suma de las especies para creación del gráfico de pastel más adelante
+
+suma_especies <- primates %>% count(species)
+
+
+
+```
+
+
+# Introducción
+
+ En este trabajo vamos a crear un gráfico, una tabla, y un mapa con los datos de los primates en Costa Rica, con el fin de visualizarlos de mejor manera.
+
+# Tabla de registro de presencia de primates en Costa Rica
+
+```{r tabla de presencia, message=FALSE}
+
+primates %>%
+  st_drop_geometry() %>%
+  select(family, species, stateProvince, canton.y, eventDate) %>%
+  datatable(
+    colnames = c("Familia", "Especie", "Provincia", "Cantón", "Fecha"),
+    options = list(searchHighlight = TRUE,
+    language = list(url =
+                      '//cdn.datatables.net/plug-ins/1.10.25/i18n/Spanish.json'),
+    pageLength = 10))
+
+```
+
+# Creación de gráfico de pastel
+
+```{r grafico}
+
+# Se crea la data con el total de especies
+
+data <- suma_especies [, c('species', 'n')]
+
+# Creación del gráfico
+
+
+fig <- plot_ly(data,
+               labels = ~ species,
+               values = ~ n,
+               type = 'pie')
+fig <-
+  fig %>% config(locale = "es")%>%
+  layout(
+    title = 'Cantidad de registros de especies de primates en Costa Rica',
+    xaxis = list(
+      showgrid = FALSE,
+      zeroline = FALSE,
+      showticklabels = FALSE
+    ),
+    yaxis = list(
+      showgrid = FALSE,
+      zeroline = FALSE,
+      showticklabels = FALSE
+    )
+  )
+# Se utiliza el fig para la ejecución del gráfico
+
+fig 
+
+```
+
+# Creación del mapa con leaflet
+
+```{r mapa primera parte}
+alt <- getData(
+  "worldclim",
+  var = "alt",
+  res = .5,
+  lon = -84,
+  lat = 10
+)
+altitud <- crop(alt, extent(-86, -82.3, 8, 11.3))
+altitud <-
+  alt %>%
+  crop(provincias) %>%
+  mask(provincias)
+
+```
+
+```{r mapa}
+primates %>%
+  select(
+    family,
+    species,
+    stateProvince,
+    canton.y,
+    eventDate,
+    decimalLongitude,
+    decimalLatitude
+  ) %>%
+  leaflet() %>%
+  addRasterImage(
+    altitud,
+    opacity = 0.8,
+    col = brewer.pal(11, "RdBu"),
+    group = "Altitud"
+  ) %>%
+  addProviderTiles(providers$OpenStreetMap.Mapnik, group = "OpenStreetMap") %>%
+  addProviderTiles(providers$Stamen.TonerLite, group = "Stamen Toner Lite") %>%
+  addProviderTiles(providers$Esri.WorldImagery, group = "Imágenes de ESRI") %>%
+  addCircleMarkers(
+    stroke = F,
+    radius = 3,
+    fillColor = '#154360',
+    fillOpacity = 1,
+    popup = paste(
+      primates$stateProvince,
+      primates$canton.y,
+      primates$eventDate,
+      primates$decimalLongitude,
+      primates$decimalLatitude,
+      sep = '<br/>'
+    ),
+    group = "primates"
+  ) %>%
+      addLayersControl(
+        baseGroups = c("OpenStreetMap", "Stamen Toner Lite", "Imágenes de ESRI"),
+        overlayGroups = c("primates", "Altitud")
+      ) %>%
+      addMiniMap(
+        tiles = providers$Stamen.OpenStreetMap.Mapnik,
+        position = "bottomleft",
+        toggleDisplay = TRUE
+      )
+
+```
